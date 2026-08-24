@@ -16,6 +16,8 @@ import {
   ChevronRight,
   ArrowRight,
   CheckCircle2,
+  Mail,
+  Phone,
 } from 'lucide-react';
 import BookingModal from '@/components/booking/BookingModal';
 
@@ -284,7 +286,7 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* 3. ABOUT ACHARYA KRISHNA (SACRED EMBLEM LAYOUT - PURE VEDIC) */}
+        {/* 3. ABOUT ACHARYA KRISHNA (SACRED EMBLEM LAYOUT) */}
         <section id="about" className="py-20 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto border-t border-yellow-400/20">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
             {/* Sacred Vedic Emblem Showcase */}
@@ -490,7 +492,7 @@ export default function HomePage() {
         </section>
       </main>
 
-      {/* 7. FOOTER */}
+      {/* 7. FOOTER WITH USER WHATSAPP & EMAIL */}
       <footer className="border-t border-yellow-400/25 bg-cosmic-950 pt-16 pb-12 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-8 mb-12">
           <div className="md:col-span-2 space-y-4">
@@ -517,16 +519,27 @@ export default function HomePage() {
             </ul>
           </div>
 
-          <div>
-            <h5 className="text-xs font-bold uppercase tracking-wider text-yellow-400 mb-3">Direct Concierge</h5>
+          <div className="space-y-3">
+            <h5 className="text-xs font-bold uppercase tracking-wider text-yellow-400 mb-3">Direct Support</h5>
+            
+            {/* WhatsApp Link */}
             <a
-              href="https://wa.me/919999999999?text=Hello%20Astro%20Krishna,%20I%20would%20like%20to%20inquire%20about%20a%20consultation."
+              href="https://wa.me/919363864607?text=Hello%20Astro%20Krishna,%20I%20would%20like%20to%20inquire%20about%20a%20consultation."
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-emerald-600/20 border border-emerald-500/30 text-emerald-300 text-xs font-medium hover:bg-emerald-600/30 transition-colors"
+              className="inline-flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-emerald-600/20 border border-emerald-500/40 text-emerald-300 text-xs font-semibold hover:bg-emerald-600/30 transition-colors w-full"
             >
-              <MessageCircle className="w-4 h-4 text-emerald-400" />
-              <span>Chat on WhatsApp</span>
+              <MessageCircle className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+              <span>WhatsApp: +91 93638 64607</span>
+            </a>
+
+            {/* Email Link */}
+            <a
+              href="mailto:kosmahura@gmail.com"
+              className="inline-flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-cosmic-900 border border-yellow-400/30 text-mystic-light text-xs font-medium hover:border-yellow-300 transition-colors w-full"
+            >
+              <Mail className="w-4 h-4 text-yellow-400 flex-shrink-0" />
+              <span>kosmahura@gmail.com</span>
             </a>
           </div>
         </div>
@@ -539,14 +552,14 @@ export default function HomePage() {
             They should not be substituted for certified medical, financial, or legal advice.
           </p>
           <div className="text-[11px] text-mystic-muted">
-            © {new Date().getFullYear()} Astro Krishna. All Rights Reserved.
+            © {new Date().getFullYear()} Astro Krishna. All Rights Reserved. • Contact: kosmahura@gmail.com | +91 93638 64607
           </div>
         </div>
       </footer>
 
       {/* FLOATING WHATSAPP BUTTON */}
       <a
-        href="https://wa.me/919999999999?text=Namaste%20Acharya%20Krishna,%20I%20have%20a%20question%20before%20booking."
+        href="https://wa.me/919363864607?text=Namaste%20Acharya%20Krishna,%20I%20have%20a%20question%20before%20booking."
         target="_blank"
         rel="noopener noreferrer"
         className="fixed bottom-6 right-6 z-40 p-3.5 rounded-full bg-emerald-500 text-white shadow-xl hover:bg-emerald-600 transition-transform transform hover:scale-110 flex items-center justify-center"
