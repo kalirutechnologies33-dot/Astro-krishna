@@ -1,0 +1,73 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-cosmic-950 text-white font-sans antialiased;
+    overflow-x: hidden;
+  }
+}
+
+::selection {
+  background-color: rgba(250, 204, 21, 0.3);
+  color: #FEF08A;
+}
+
+.gold-text-shimmer {
+  background: linear-gradient(135deg, #FFFFFF 0%, #FFF08A 25%, #FFD700 50%, #F5C518 75%, #FFFFFF 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-size: 200% auto;
+  animation: shimmer 6s ease infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@keyframes celestialRotateClockwise {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes celestialRotateCounter {
+  from {
+    transform: rotate(360deg);
+  }
+  to {
+    transform: rotate(0deg);
+  }
+}
+
+.rotate-celestial-cw {
+  animation: celestialRotateClockwise 35s linear infinite;
+  transform-origin: center;
+}
+
+.rotate-celestial-ccw {
+  animation: celestialRotateCounter 25s linear infinite;
+  transform-origin: center;
+}
+
+.glass-panel {
+  background: rgba(17, 21, 48, 0.75);
+  backdrop-filter: blur(18px);
+  border: 1px solid rgba(250, 204, 21, 0.22);
+}
+
+.glass-panel-hover {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-panel-hover:hover {
+  border-color: rgba(250, 204, 21, 0.55);
+  box-shadow: 0 12px 35px -8px rgba(250, 204, 21, 0.3);
+  transform: translateY(-4px);
+}
