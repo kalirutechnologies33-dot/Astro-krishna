@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { razorpayClient } from '@/lib/razorpay';
+import { getRazorpayClient } from '@/lib/razorpay';
 import { supabase } from '@/lib/supabaseClient';
 
 export async function POST(req: Request) {
@@ -24,13 +24,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Missing required booking fields' }, { status: 400 });
     }
 
-    const keyId = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || process.env.RAZORPAY_KEY_ID || '';
-    const keySecret = process.env.RAZORPAY_KEY_SECRET || '';
+    const keyId = (process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || process.env.RAZORPAY_KEY_ID || '').trim();
+    const razorpay = getRazorpayClient();
 
     // 1. Create Razorpay Order
     let razorpayOrder;
     try {
-      razorpayOrder = await razorpayClient.orders.create({
+      razorpayOrder = await razorpay.orders.create({
         amount: Math.round(Number(amount) * 100), // amount in paise
         currency: 'INR',
         receipt: `ak_${Date.now()}`.slice(0, 40),
@@ -41,17 +41,17 @@ export async function POST(req: Request) {
         },
       });
     } catch (rzpErr: any) {
-      console.error('Razorpay Order Creation Failed:', rzpErr);
+      console.error('Razorpay Order Creation Error:', rzpErr);
       return NextResponse.json(
-        { error: rzpErr?.error?.description || rzpErr?.message || 'Failed to create Razorpay Order' },
+        { error: rzpErr?.error?.description || rzpErr?.message || 'Razorpay order creation failed' },
         { status: 500 }
       );
     }
 
-    // 2. Insert into Supabase Bookings (letting Supabase assign default UUID)
-    let bookingRecordId = null;
+    // 2. Insert into Supabase Bookings
+    let bookingRecordId = razorpayOrder.id;
     try {
-      const { data: booking, error: dbErr } = await supabase
+      const { data: booking } = await supabase
         .from('bookings')
         .insert({
           delivery_method: deliveryMethod,
@@ -71,7 +71,6 @@ export async function POST(req: Request) {
 
       if (booking) {
         bookingRecordId = booking.id;
-        // Insert transaction reference
         await supabase.from('transactions').insert({
           booking_id: booking.id,
           razorpay_order_id: razorpayOrder.id,
@@ -80,12 +79,12 @@ export async function POST(req: Request) {
         });
       }
     } catch (supabaseErr) {
-      console.warn('Supabase insert skipped or pending:', supabaseErr);
+      console.warn('Supabase logging skipped:', supabaseErr);
     }
 
     return NextResponse.json({
       orderId: razorpayOrder.id,
-      bookingId: bookingRecordId || razorpayOrder.id,
+      bookingId: bookingRecordId,
       amount: razorpayOrder.amount,
       currency: razorpayOrder.currency,
       keyId: keyId,
