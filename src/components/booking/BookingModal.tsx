@@ -93,35 +93,36 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
       });
 
       const orderData = await res.json();
-      if (!res.ok) {
+      if (!res.ok || !orderData.orderId) {
         throw new Error(orderData.error || 'Failed to initialize booking');
       }
 
       // 2. Load Razorpay Checkout Script
       const scriptLoaded = await loadRazorpayScript();
       if (!scriptLoaded || !(window as any).Razorpay) {
-        throw new Error('Could not load Razorpay payment gateway. Please check your connection.');
+        throw new Error('Could not load Razorpay payment gateway. Please check your internet connection.');
       }
 
+      const activeKey = orderData.keyId || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || '';
+
       const options = {
-        key: orderData.keyId,
+        key: activeKey,
         amount: orderData.amount,
         currency: orderData.currency || 'INR',
         name: 'Astro Krishna',
         description: `${service.title} (${deliveryMethod === 'AUDIO_CALL' ? '1-on-1 Call' : 'PDF Report'})`,
-        image: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=128&auto=format&fit=crop&q=80',
         order_id: orderData.orderId,
         prefill: {
           name: formData.fullName,
           email: formData.email,
-          contact: formData.phone,
+          contact: formData.phone.replace(/\D/g, '').slice(-10),
         },
         theme: {
           color: '#070913',
         },
         handler: async function (response: any) {
           try {
-            const verifyRes = await fetch('/api/razorpay/verify-payment', {
+            await fetch('/api/razorpay/verify-payment', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -131,13 +132,7 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
                 booking_id: orderData.bookingId,
               }),
             });
-
-            const verifyData = await verifyRes.json();
-            if (verifyRes.ok && verifyData.success) {
-              window.location.href = `/booking/success?bookingId=${orderData.bookingId}`;
-            } else {
-              window.location.href = `/booking/success?bookingId=${orderData.bookingId}`;
-            }
+            window.location.href = `/booking/success?bookingId=${orderData.bookingId}`;
           } catch (verifyErr) {
             console.error('Verification error:', verifyErr);
             window.location.href = `/booking/success?bookingId=${orderData.bookingId}`;
@@ -151,9 +146,14 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
       };
 
       const razorpayInstance = new (window as any).Razorpay(options);
+      
       razorpayInstance.on('payment.failed', function (response: any) {
-        console.error('Razorpay Payment Failed:', response.error);
-        setErrorMessage(response.error?.description || 'Payment was unsuccessful. Please try with another UPI app or Card.');
+        console.error('Payment failure event:', response.error);
+        setErrorMessage(
+          response.error?.description || 
+          response.error?.reason || 
+          'Payment was not completed. Please try again with UPI or another method.'
+        );
         setLoading(false);
       });
 
@@ -198,7 +198,7 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
           </div>
 
           {errorMessage && (
-            <div className="mb-6 p-4 rounded-xl bg-red-950/70 border border-red-500/50 text-red-200 text-sm flex items-center gap-3">
+            <div className="mb-6 p-4 rounded-xl bg-red-950/80 border border-red-500/50 text-red-200 text-sm flex items-center gap-3">
               <AlertCircle className="w-5 h-5 flex-shrink-0 text-red-400" />
               <span>{errorMessage}</span>
             </div>
@@ -328,7 +328,7 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
                   <input
                     type="tel"
                     name="phone"
-                    placeholder="WhatsApp Phone Number (+91) *"
+                    placeholder="WhatsApp Phone Number (10 digits) *"
                     required
                     value={formData.phone}
                     onChange={handleInputChange}
