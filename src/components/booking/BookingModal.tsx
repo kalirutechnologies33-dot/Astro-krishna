@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, PhoneCall, FileText, Calendar, Clock, Sparkles, CheckCircle2, ShieldCheck, AlertCircle } from 'lucide-react';
+import { X, PhoneCall, FileText, Calendar, Sparkles, CheckCircle2, ShieldCheck, AlertCircle } from 'lucide-react';
 
 interface Service {
   id: string;
@@ -52,20 +52,6 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  const loadRazorpayScript = (): Promise<boolean> => {
-    return new Promise((resolve) => {
-      if ((window as any).Razorpay) {
-        resolve(true);
-        return;
-      }
-      const script = document.createElement('script');
-      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
-      script.onload = () => resolve(true);
-      script.onerror = () => resolve(false);
-      document.body.appendChild(script);
-    });
-  };
-
   const handlePayment = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -94,23 +80,22 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
 
       const orderData = await res.json();
       if (!res.ok || !orderData.orderId) {
-        throw new Error(orderData.error || 'Failed to initialize booking');
+        throw new Error(orderData.error || 'Unable to create payment order. Please try again.');
       }
 
-      // 2. Load Razorpay Checkout Script
-      const scriptLoaded = await loadRazorpayScript();
-      if (!scriptLoaded || !(window as any).Razorpay) {
-        throw new Error('Could not load Razorpay payment gateway. Please check your internet connection.');
+      // Check if Razorpay SDK is ready
+      if (typeof window === 'undefined' || !(window as any).Razorpay) {
+        throw new Error('Razorpay payment gateway is still loading. Please refresh and try again.');
       }
 
-      const activeKey = orderData.keyId || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || '';
+      const activeKey = orderData.keyId || 'rzp_live_TU0K05M8ZcRiG9';
 
       const options = {
         key: activeKey,
         amount: orderData.amount,
         currency: orderData.currency || 'INR',
         name: 'Astro Krishna',
-        description: `${service.title} (${deliveryMethod === 'AUDIO_CALL' ? '1-on-1 Call' : 'PDF Report'})`,
+        description: `${service.title} (${deliveryMethod === 'AUDIO_CALL' ? '1-on-1 Audio Call' : 'PDF Report'})`,
         order_id: orderData.orderId,
         prefill: {
           name: formData.fullName,
@@ -118,7 +103,7 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
           contact: formData.phone.replace(/\D/g, '').slice(-10),
         },
         theme: {
-          color: '#070913',
+          color: '#eab308',
         },
         handler: async function (response: any) {
           try {
@@ -146,20 +131,21 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
       };
 
       const razorpayInstance = new (window as any).Razorpay(options);
-      
+
       razorpayInstance.on('payment.failed', function (response: any) {
-        console.error('Payment failure event:', response.error);
+        console.error('Payment failed:', response.error);
         setErrorMessage(
-          response.error?.description || 
-          response.error?.reason || 
-          'Payment was not completed. Please try again with UPI or another method.'
+          response.error?.description ||
+          response.error?.reason ||
+          'Payment unsuccessful. Please try again or choose another payment method.'
         );
         setLoading(false);
       });
 
       razorpayInstance.open();
+      setLoading(false);
     } catch (err: any) {
-      console.error('Payment initialization error:', err);
+      console.error('Payment submission error:', err);
       setErrorMessage(err.message || 'Something went wrong. Please try again.');
       setLoading(false);
     }
