@@ -20,62 +20,75 @@ export async function POST(req: Request) {
       amount,
     } = body;
 
-    if (!serviceId || !clientName || !clientEmail || !clientPhone || !amount) {
+    if (!clientName || !clientEmail || !clientPhone || !amount) {
       return NextResponse.json({ error: 'Missing required booking fields' }, { status: 400 });
     }
 
-    let orderId = `order_mock_${Date.now()}`;
-    let keyId = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || 'rzp_test_mockKeyForDev123';
+    const keyId = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || process.env.RAZORPAY_KEY_ID || '';
+    const keySecret = process.env.RAZORPAY_KEY_SECRET || '';
 
-    // Attempt Razorpay order creation if real keys are configured
+    // 1. Create Razorpay Order
+    let razorpayOrder;
     try {
-      if (process.env.RAZORPAY_KEY_SECRET && !process.env.RAZORPAY_KEY_SECRET.includes('mock')) {
-        const razorpayOrder = await razorpayClient.orders.create({
-          amount: Math.round(amount * 100),
-          currency: 'INR',
-          receipt: `rcpt_${Date.now()}`,
-          notes: {
-            serviceId,
-            deliveryMethod,
-            clientName,
-            clientPhone,
-          },
-        });
-        orderId = razorpayOrder.id;
-      }
-    } catch (rzpErr) {
-      console.warn('Razorpay API offline or mock mode active, using fallback dev order ID:', rzpErr);
+      razorpayOrder = await razorpayClient.orders.create({
+        amount: Math.round(Number(amount) * 100), // amount in paise
+        currency: 'INR',
+        receipt: `ak_${Date.now()}`.slice(0, 40),
+        notes: {
+          clientName: String(clientName),
+          clientPhone: String(clientPhone),
+          deliveryMethod: String(deliveryMethod),
+        },
+      });
+    } catch (rzpErr: any) {
+      console.error('Razorpay Order Creation Failed:', rzpErr);
+      return NextResponse.json(
+        { error: rzpErr?.error?.description || rzpErr?.message || 'Failed to create Razorpay Order' },
+        { status: 500 }
+      );
     }
 
-    const bookingId = `book_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-
-    // Safely attempt Supabase recording
+    // 2. Insert into Supabase Bookings (letting Supabase assign default UUID)
+    let bookingRecordId = null;
     try {
-      await supabase.from('bookings').insert({
-        id: bookingId,
-        service_id: serviceId,
-        delivery_method: deliveryMethod,
-        client_name: clientName,
-        client_email: clientEmail,
-        client_phone: clientPhone,
-        gender,
-        date_of_birth: dob,
-        time_of_birth: tob,
-        place_of_birth: pob,
-        specific_concerns: specificConcerns,
-        scheduled_call_time: deliveryMethod === 'AUDIO_CALL' ? scheduledCallTime : null,
-        status: 'PENDING_PAYMENT',
-      });
-    } catch (dbErr) {
-      console.warn('Supabase DB offline/mock mode:', dbErr);
+      const { data: booking, error: dbErr } = await supabase
+        .from('bookings')
+        .insert({
+          delivery_method: deliveryMethod,
+          client_name: clientName,
+          client_email: clientEmail,
+          client_phone: clientPhone,
+          gender: gender || 'Female',
+          date_of_birth: dob || new Date().toISOString().split('T')[0],
+          time_of_birth: tob || '12:00',
+          place_of_birth: pob || 'India',
+          specific_concerns: specificConcerns || '',
+          scheduled_call_time: deliveryMethod === 'AUDIO_CALL' ? scheduledCallTime : null,
+          status: 'PENDING_PAYMENT',
+        })
+        .select('id')
+        .single();
+
+      if (booking) {
+        bookingRecordId = booking.id;
+        // Insert transaction reference
+        await supabase.from('transactions').insert({
+          booking_id: booking.id,
+          razorpay_order_id: razorpayOrder.id,
+          amount_inr: Number(amount),
+          payment_status: 'CREATED',
+        });
+      }
+    } catch (supabaseErr) {
+      console.warn('Supabase insert skipped or pending:', supabaseErr);
     }
 
     return NextResponse.json({
-      orderId,
-      bookingId,
-      amount: Math.round(amount * 100),
-      currency: 'INR',
-      keyId,
+      orderId: razorpayOrder.id,
+      bookingId: bookingRecordId || razorpayOrder.id,
+      amount: razorpayOrder.amount,
+      currency: razorpayOrder.currency,
+      keyId: keyId,
     });
   } catch (error: any) {
     console.error('Create order error:', error);

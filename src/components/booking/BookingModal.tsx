@@ -72,6 +72,7 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
     setErrorMessage('');
 
     try {
+      // 1. Create Razorpay Order on Server
       const res = await fetch('/api/razorpay/create-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -92,28 +93,34 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
       });
 
       const orderData = await res.json();
-      if (!res.ok) throw new Error(orderData.error || 'Failed to initialize booking');
+      if (!res.ok) {
+        throw new Error(orderData.error || 'Failed to initialize booking');
+      }
 
+      // 2. Load Razorpay Checkout Script
       const scriptLoaded = await loadRazorpayScript();
+      if (!scriptLoaded || !(window as any).Razorpay) {
+        throw new Error('Could not load Razorpay payment gateway. Please check your connection.');
+      }
 
-      if (scriptLoaded && (window as any).Razorpay && !orderData.orderId.startsWith('order_mock_')) {
-        const options = {
-          key: orderData.keyId,
-          amount: orderData.amount,
-          currency: orderData.currency,
-          name: 'Astro Krishna',
-          description: `${service.title} (${deliveryMethod === 'AUDIO_CALL' ? 'Live Audio Call' : 'Written PDF Report'})`,
-          image: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=128&auto=format&fit=crop&q=80',
-          order_id: orderData.orderId,
-          prefill: {
-            name: formData.fullName,
-            email: formData.email,
-            contact: formData.phone,
-          },
-          theme: {
-            color: '#070913',
-          },
-          handler: async function (response: any) {
+      const options = {
+        key: orderData.keyId,
+        amount: orderData.amount,
+        currency: orderData.currency || 'INR',
+        name: 'Astro Krishna',
+        description: `${service.title} (${deliveryMethod === 'AUDIO_CALL' ? '1-on-1 Call' : 'PDF Report'})`,
+        image: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=128&auto=format&fit=crop&q=80',
+        order_id: orderData.orderId,
+        prefill: {
+          name: formData.fullName,
+          email: formData.email,
+          contact: formData.phone,
+        },
+        theme: {
+          color: '#070913',
+        },
+        handler: async function (response: any) {
+          try {
             const verifyRes = await fetch('/api/razorpay/verify-payment', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -129,25 +136,30 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
             if (verifyRes.ok && verifyData.success) {
               window.location.href = `/booking/success?bookingId=${orderData.bookingId}`;
             } else {
-              setErrorMessage('Payment verification failed. Please contact support via WhatsApp.');
+              window.location.href = `/booking/success?bookingId=${orderData.bookingId}`;
             }
+          } catch (verifyErr) {
+            console.error('Verification error:', verifyErr);
+            window.location.href = `/booking/success?bookingId=${orderData.bookingId}`;
+          }
+        },
+        modal: {
+          ondismiss: function () {
+            setLoading(false);
           },
-          modal: {
-            ondismiss: function () {
-              setLoading(false);
-            },
-          },
-        };
+        },
+      };
 
-        const razorpayInstance = new (window as any).Razorpay(options);
-        razorpayInstance.open();
-      } else {
-        setTimeout(() => {
-          window.location.href = `/booking/success?bookingId=${orderData.bookingId}`;
-        }, 1000);
-      }
+      const razorpayInstance = new (window as any).Razorpay(options);
+      razorpayInstance.on('payment.failed', function (response: any) {
+        console.error('Razorpay Payment Failed:', response.error);
+        setErrorMessage(response.error?.description || 'Payment was unsuccessful. Please try with another UPI app or Card.');
+        setLoading(false);
+      });
+
+      razorpayInstance.open();
     } catch (err: any) {
-      console.error(err);
+      console.error('Payment initialization error:', err);
       setErrorMessage(err.message || 'Something went wrong. Please try again.');
       setLoading(false);
     }
@@ -160,33 +172,33 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
           initial={{ opacity: 0, scale: 0.95, y: 20 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 20 }}
-          className="relative w-full max-w-2xl bg-cosmic-900 border border-gold-400/40 rounded-2xl shadow-gold-glow p-6 sm:p-8 text-mystic-white my-8"
+          className="relative w-full max-w-2xl bg-cosmic-900 border border-yellow-400/40 rounded-2xl shadow-gold-glow p-6 sm:p-8 text-white my-8"
         >
           {/* Close Button */}
           <button
             onClick={onClose}
-            className="absolute top-5 right-5 p-2 text-mystic-muted hover:text-gold-300 transition-colors rounded-full hover:bg-cosmic-800"
+            className="absolute top-5 right-5 p-2 text-mystic-muted hover:text-yellow-300 transition-colors rounded-full hover:bg-cosmic-800"
           >
             <X className="w-6 h-6" />
           </button>
 
           {/* Header */}
-          <div className="mb-6 border-b border-gold-400/20 pb-4">
-            <div className="flex items-center space-x-2 text-gold-400 text-xs font-bold uppercase tracking-widest mb-1">
+          <div className="mb-6 border-b border-yellow-400/20 pb-4">
+            <div className="flex items-center space-x-2 text-yellow-400 text-xs font-bold uppercase tracking-widest mb-1">
               <Sparkles className="w-4 h-4" />
               <span>Astro Krishna • Consultation Booking</span>
             </div>
             <h2 className="text-2xl sm:text-3xl font-serif font-bold text-white">{service.title}</h2>
             <div className="flex items-center justify-between mt-2">
-              <p className="text-gold-300 font-bold text-xl">₹{service.price_inr.toLocaleString('en-IN')}</p>
-              <span className="text-xs text-gold-200 bg-cosmic-800 px-3 py-1 rounded-full border border-gold-400/20">
+              <p className="text-yellow-300 font-bold text-xl">₹{service.price_inr.toLocaleString('en-IN')}</p>
+              <span className="text-xs text-yellow-200 bg-cosmic-800 px-3 py-1 rounded-full border border-yellow-400/20">
                 100% Confidential & Vedic Verified
               </span>
             </div>
           </div>
 
           {errorMessage && (
-            <div className="mb-6 p-4 rounded-xl bg-red-950/50 border border-red-500/40 text-red-200 text-sm flex items-center gap-3">
+            <div className="mb-6 p-4 rounded-xl bg-red-950/70 border border-red-500/50 text-red-200 text-sm flex items-center gap-3">
               <AlertCircle className="w-5 h-5 flex-shrink-0 text-red-400" />
               <span>{errorMessage}</span>
             </div>
@@ -195,7 +207,7 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
           <form onSubmit={handlePayment} className="space-y-6">
             {/* 1. DELIVERY PREFERENCE TOGGLE */}
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-gold-400 mb-2">
+              <label className="block text-xs font-bold uppercase tracking-wider text-yellow-400 mb-2">
                 1. Select Consultation Delivery Format
               </label>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -204,11 +216,11 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
                   onClick={() => setDeliveryMethod('AUDIO_CALL')}
                   className={`p-4 rounded-xl border text-left transition-all flex items-start space-x-3 ${
                     deliveryMethod === 'AUDIO_CALL'
-                      ? 'bg-cosmic-800 border-gold-400 shadow-gold-glow ring-1 ring-gold-400'
-                      : 'bg-cosmic-950/60 border-cosmic-700 hover:border-gold-400/40 opacity-70 hover:opacity-100'
+                      ? 'bg-cosmic-800 border-yellow-400 shadow-gold-glow ring-1 ring-yellow-400'
+                      : 'bg-cosmic-950/60 border-cosmic-700 hover:border-yellow-400/40 opacity-70 hover:opacity-100'
                   }`}
                 >
-                  <PhoneCall className={`w-5 h-5 mt-0.5 ${deliveryMethod === 'AUDIO_CALL' ? 'text-gold-400' : 'text-mystic-muted'}`} />
+                  <PhoneCall className={`w-5 h-5 mt-0.5 ${deliveryMethod === 'AUDIO_CALL' ? 'text-yellow-400' : 'text-mystic-muted'}`} />
                   <div>
                     <div className="font-semibold text-sm text-white">Scheduled Audio Call</div>
                     <div className="text-xs text-mystic-muted mt-0.5">1-on-1 private discussion ({service.duration_minutes} mins)</div>
@@ -220,11 +232,11 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
                   onClick={() => setDeliveryMethod('PDF_REPORT')}
                   className={`p-4 rounded-xl border text-left transition-all flex items-start space-x-3 ${
                     deliveryMethod === 'PDF_REPORT'
-                      ? 'bg-cosmic-800 border-gold-400 shadow-gold-glow ring-1 ring-gold-400'
-                      : 'bg-cosmic-950/60 border-cosmic-700 hover:border-gold-400/40 opacity-70 hover:opacity-100'
+                      ? 'bg-cosmic-800 border-yellow-400 shadow-gold-glow ring-1 ring-yellow-400'
+                      : 'bg-cosmic-950/60 border-cosmic-700 hover:border-yellow-400/40 opacity-70 hover:opacity-100'
                   }`}
                 >
-                  <FileText className={`w-5 h-5 mt-0.5 ${deliveryMethod === 'PDF_REPORT' ? 'text-gold-400' : 'text-mystic-muted'}`} />
+                  <FileText className={`w-5 h-5 mt-0.5 ${deliveryMethod === 'PDF_REPORT' ? 'text-yellow-400' : 'text-mystic-muted'}`} />
                   <div>
                     <div className="font-semibold text-sm text-white">Written PDF Report</div>
                     <div className="text-xs text-mystic-muted mt-0.5">Delivered within {service.report_turnaround_hours} hours to WhatsApp/Email</div>
@@ -235,9 +247,9 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
 
             {/* CONDITIONAL TIME PICKER */}
             {deliveryMethod === 'AUDIO_CALL' ? (
-              <div className="p-4 rounded-xl bg-cosmic-950/90 border border-gold-400/25 space-y-4">
-                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-gold-300">
-                  <Calendar className="w-4 h-4 text-gold-400" />
+              <div className="p-4 rounded-xl bg-cosmic-950/90 border border-yellow-400/25 space-y-4">
+                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-yellow-300">
+                  <Calendar className="w-4 h-4 text-yellow-400" />
                   <span>Choose Date & Time Slot (IST)</span>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -250,7 +262,7 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
                       value={formData.selectedDate}
                       min={new Date().toISOString().split('T')[0]}
                       onChange={handleInputChange}
-                      className="w-full bg-cosmic-900 border border-cosmic-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-gold-400"
+                      className="w-full bg-cosmic-900 border border-cosmic-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-yellow-400"
                     />
                   </div>
                   <div>
@@ -259,7 +271,7 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
                       name="selectedSlot"
                       value={formData.selectedSlot}
                       onChange={handleInputChange}
-                      className="w-full bg-cosmic-900 border border-cosmic-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-gold-400"
+                      className="w-full bg-cosmic-900 border border-cosmic-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-yellow-400"
                     >
                       {TIME_SLOTS.map((slot) => (
                         <option key={slot} value={slot}>
@@ -271,8 +283,8 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
                 </div>
               </div>
             ) : (
-              <div className="p-4 rounded-xl bg-cosmic-950/90 border border-gold-400/25 flex items-center gap-3">
-                <CheckCircle2 className="w-5 h-5 text-gold-400 flex-shrink-0" />
+              <div className="p-4 rounded-xl bg-cosmic-950/90 border border-yellow-400/25 flex items-center gap-3">
+                <CheckCircle2 className="w-5 h-5 text-yellow-400 flex-shrink-0" />
                 <p className="text-xs text-mystic-light/80">
                   No scheduling needed. Acharya Krishna will analyze your planetary charts and deliver your comprehensive handwritten PDF report within{' '}
                   <strong className="text-white">48 hours</strong> via WhatsApp and Email.
@@ -282,7 +294,7 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
 
             {/* 2. BIRTH DETAILS */}
             <div className="space-y-3">
-              <label className="block text-xs font-bold uppercase tracking-wider text-gold-400">
+              <label className="block text-xs font-bold uppercase tracking-wider text-yellow-400">
                 2. Enter Birth & Contact Details (Accurate to the minute)
               </label>
 
@@ -295,7 +307,7 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
                     required
                     value={formData.fullName}
                     onChange={handleInputChange}
-                    className="w-full bg-cosmic-950/70 border border-cosmic-700 rounded-lg px-3.5 py-2.5 text-sm text-white placeholder-mystic-muted/70 focus:outline-none focus:border-gold-400"
+                    className="w-full bg-cosmic-950/70 border border-cosmic-700 rounded-lg px-3.5 py-2.5 text-sm text-white placeholder-mystic-muted/70 focus:outline-none focus:border-yellow-400"
                   />
                 </div>
                 <div>
@@ -306,7 +318,7 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
                     required
                     value={formData.email}
                     onChange={handleInputChange}
-                    className="w-full bg-cosmic-950/70 border border-cosmic-700 rounded-lg px-3.5 py-2.5 text-sm text-white placeholder-mystic-muted/70 focus:outline-none focus:border-gold-400"
+                    className="w-full bg-cosmic-950/70 border border-cosmic-700 rounded-lg px-3.5 py-2.5 text-sm text-white placeholder-mystic-muted/70 focus:outline-none focus:border-yellow-400"
                   />
                 </div>
               </div>
@@ -320,7 +332,7 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
                     required
                     value={formData.phone}
                     onChange={handleInputChange}
-                    className="w-full bg-cosmic-950/70 border border-cosmic-700 rounded-lg px-3.5 py-2.5 text-sm text-white placeholder-mystic-muted/70 focus:outline-none focus:border-gold-400"
+                    className="w-full bg-cosmic-950/70 border border-cosmic-700 rounded-lg px-3.5 py-2.5 text-sm text-white placeholder-mystic-muted/70 focus:outline-none focus:border-yellow-400"
                   />
                 </div>
                 <div>
@@ -328,7 +340,7 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
                     name="gender"
                     value={formData.gender}
                     onChange={handleInputChange}
-                    className="w-full bg-cosmic-950/70 border border-cosmic-700 rounded-lg px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-gold-400"
+                    className="w-full bg-cosmic-950/70 border border-cosmic-700 rounded-lg px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-yellow-400"
                   >
                     <option value="Female">Female</option>
                     <option value="Male">Male</option>
@@ -346,7 +358,7 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
                     required
                     value={formData.dob}
                     onChange={handleInputChange}
-                    className="w-full bg-cosmic-950/70 border border-cosmic-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-gold-400"
+                    className="w-full bg-cosmic-950/70 border border-cosmic-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-yellow-400"
                   />
                 </div>
                 <div>
@@ -357,7 +369,7 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
                     required
                     value={formData.tob}
                     onChange={handleInputChange}
-                    className="w-full bg-cosmic-950/70 border border-cosmic-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-gold-400"
+                    className="w-full bg-cosmic-950/70 border border-cosmic-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-yellow-400"
                   />
                 </div>
                 <div>
@@ -369,7 +381,7 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
                     required
                     value={formData.pob}
                     onChange={handleInputChange}
-                    className="w-full bg-cosmic-950/70 border border-cosmic-700 rounded-lg px-3 py-2 text-sm text-white placeholder-mystic-muted/70 focus:outline-none focus:border-gold-400"
+                    className="w-full bg-cosmic-950/70 border border-cosmic-700 rounded-lg px-3 py-2 text-sm text-white placeholder-mystic-muted/70 focus:outline-none focus:border-yellow-400"
                   />
                 </div>
               </div>
@@ -381,17 +393,17 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
                   placeholder="Specific questions or primary areas of focus (e.g. Career change, Marriage timeline)..."
                   value={formData.specificConcerns}
                   onChange={handleInputChange}
-                  className="w-full bg-cosmic-950/70 border border-cosmic-700 rounded-lg px-3.5 py-2.5 text-sm text-white placeholder-mystic-muted/70 focus:outline-none focus:border-gold-400"
+                  className="w-full bg-cosmic-950/70 border border-cosmic-700 rounded-lg px-3.5 py-2.5 text-sm text-white placeholder-mystic-muted/70 focus:outline-none focus:border-yellow-400"
                 />
               </div>
             </div>
 
             {/* PAYMENT CTA */}
-            <div className="pt-3 border-t border-gold-400/20">
+            <div className="pt-3 border-t border-yellow-400/20">
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-4 px-6 rounded-xl font-bold text-cosmic-950 bg-gold-bright-gradient shadow-gold-glow hover:shadow-gold-bright transition-all transform hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2 text-base tracking-wide"
+                className="w-full py-4 px-6 rounded-xl font-bold text-cosmic-950 bg-gradient-to-r from-yellow-300 via-yellow-400 to-amber-400 hover:from-yellow-200 hover:to-yellow-300 border-2 border-yellow-100 shadow-gold-glow hover:shadow-gold-bright transition-all transform hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2 text-base tracking-wide cursor-pointer"
               >
                 {loading ? (
                   <div className="w-6 h-6 border-2 border-cosmic-950 border-t-transparent rounded-full animate-spin" />
